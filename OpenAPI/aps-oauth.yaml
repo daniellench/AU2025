@@ -1,0 +1,354 @@
+openapi: 3.0.3
+info:
+  title: Autodesk Platform Services (APS) OAuth API
+  description: |
+    OAuth 2.0 authentication specification for Autodesk Platform Services (APS).
+    
+    Supports both 2-legged (server-to-server) and 3-legged (user authorization) 
+    OAuth flows for accessing Autodesk Construction Cloud (ACC) APIs.
+    
+    This specification covers the authentication endpoints and flows needed
+    to obtain access tokens for APS API integration.
+    
+    Co-authored by Daniel Lench and Claude
+    
+    DISCLAIMER: This specification is provided "as-is" and may contain errors or inaccuracies.
+    Use at your own risk. No warranties or guarantees are provided. Always verify against
+    official Autodesk documentation and test thoroughly in your environment.
+  version: 1.0.0
+  contact:
+    name: Autodesk Platform Services
+    url: https://aps.autodesk.com
+
+servers:
+  - url: https://developer.api.autodesk.com
+    description: Autodesk Platform Services Production API
+
+paths:
+  /authentication/v2/token:
+    post:
+      summary: Get access token (2-legged OAuth)
+      description: |
+        Obtain a 2-legged OAuth access token for server-to-server authentication.
+        Requires client credentials (client_id and client_secret) encoded as Basic auth.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials]
+                  example: client_credentials
+                scope:
+                  type: string
+                  description: |
+                    Space-separated list of OAuth scopes. Available scopes include:
+                    
+                    Account Management:
+                    - account:read - Read account information
+                    - account:write - Modify account information
+                    
+                    User Management:
+                    - user:read - Read user information
+                    - user:write - Create/modify users
+                    - user-profile:read - Read user profile information
+                    
+                    Data Management:
+                    - data:read - Read project data
+                    - data:write - Upload/modify project data
+                    - data:create - Create folders and items
+                    - data:search - Search project data
+                    
+                    Project Management:
+                    - bucket:read - Read object storage buckets
+                    - bucket:create - Create object storage buckets
+                    - bucket:delete - Delete object storage buckets
+                    
+                    Workflow & Webhooks:
+                    - code:all - Execute custom code
+                    - webhook:read - Read webhook configurations
+                    - webhook:write - Create/modify webhooks
+                    
+                    Viewing:
+                    - viewables:read - Access viewable derivatives
+                  example: "account:read account:write data:read data:write user:read user:write"
+              required:
+                - grant_type
+                - scope
+      responses:
+        '200':
+          description: Access token granted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: Bearer token for API access
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    description: Token expiration time in seconds
+                  scope:
+                    type: string
+                    description: Granted scopes
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /authentication/v2/authorize:
+    get:
+      summary: Start 3-legged OAuth authorization flow
+      description: |
+        Initiate user authorization flow for 3-legged OAuth.
+        Redirects user to Autodesk login page.
+      security: []
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code]
+          example: code
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Your application's client ID
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: URL to redirect after authorization
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Space-separated list of scopes
+          example: "data:read data:write"
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: Optional state parameter for CSRF protection
+      responses:
+        '302':
+          description: Redirect to Autodesk authorization page
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /authentication/v2/gettoken:
+    post:
+      summary: Exchange authorization code for tokens (3-legged OAuth)
+      description: |
+        Exchange authorization code received from callback for access and refresh tokens.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code]
+                  example: authorization_code
+                code:
+                  type: string
+                  description: Authorization code from callback
+                client_id:
+                  type: string
+                  description: Your application's client ID
+                client_secret:
+                  type: string
+                  description: Your application's client secret
+                redirect_uri:
+                  type: string
+                  format: uri
+                  description: Same redirect URI used in authorization request
+              required:
+                - grant_type
+                - code
+                - client_id
+                - client_secret
+                - redirect_uri
+      responses:
+        '200':
+          description: Tokens granted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: Bearer token for API access
+                  refresh_token:
+                    type: string
+                    description: Token for refreshing access token
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    description: Access token expiration time in seconds
+                  scope:
+                    type: string
+                    description: Granted scopes
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /authentication/v2/refreshtoken:
+    post:
+      summary: Refresh access token
+      description: |
+        Use refresh token to obtain a new access token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum: [refresh_token]
+                  example: refresh_token
+                refresh_token:
+                  type: string
+                  description: Refresh token from previous authorization
+                client_id:
+                  type: string
+                  description: Your application's client ID
+                client_secret:
+                  type: string
+                  description: Your application's client secret
+              required:
+                - grant_type
+                - refresh_token
+                - client_id
+                - client_secret
+      responses:
+        '200':
+          description: New access token granted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: New bearer token for API access
+                  refresh_token:
+                    type: string
+                    description: New refresh token (may be same as input)
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    description: Access token expiration time in seconds
+                  scope:
+                    type: string
+                    description: Granted scopes
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Bearer token obtained from OAuth endpoints.
+        Include as: Authorization: Bearer {access_token}
+
+  responses:
+    BadRequest:
+      description: Bad Request - Invalid parameters or malformed syntax
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid request parameters"
+              error_description:
+                type: string
+                example: "The grant_type parameter is required"
+              code:
+                type: integer
+                example: 400
+    
+    Unauthorized:
+      description: Unauthorized - Invalid credentials
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "invalid_client"
+              error_description:
+                type: string
+                example: "Invalid client credentials"
+              code:
+                type: integer
+                example: 401
+
+  schemas:
+    OAuthScope:
+      type: string
+      enum:
+        # Account Management
+        - account:read
+        - account:write
+        
+        # User Management
+        - user:read
+        - user:write
+        - user-profile:read
+        
+        # Data Management
+        - data:read
+        - data:write
+        - data:create
+        - data:search
+        
+        # Project Management
+        - bucket:read
+        - bucket:create
+        - bucket:delete
+        
+        # Workflow & Webhooks
+        - code:all
+        - webhook:read
+        - webhook:write
+        
+        # Viewing
+        - viewables:read
+      description: |
+        Available OAuth scopes for Autodesk Platform Services.
+        Combine multiple scopes with spaces for broader access.
