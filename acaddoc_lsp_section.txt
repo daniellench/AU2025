@@ -1,0 +1,134 @@
+;; =============================================================================
+;; ACADDOC.LSP - SYSTEM VARIABLE ENFORCEMENT (PER DRAWING)
+;; =============================================================================
+;; This file loads for each drawing that is opened
+;; Copy and paste this entire section into your acaddoc.lsp file
+;; =============================================================================
+
+;; Per-drawing specific system variables (lightweight enforcement)
+(defun get-drawing-sysvar-standards ()
+  '(
+    ;; CRITICAL PLOTTING VARIABLES (per drawing)
+    ("PSLTSCALE" . 1)        ; Paper space linetype scaling
+    ("MSLTSCALE" . 1)        ; Model space linetype scaling
+    ("VISRETAIN" . 1)        ; Retain xref layer settings
+    ("LWDISPLAY" . 1)        ; Display lineweights
+    
+    ;; ANNOTATION VARIABLES (drawing-specific)
+    ("CANNOSCALE" . "1:1")   ; Current annotation scale
+    ("ANNOAUTOSCALE" . -4)   ; Automatic annotation scaling
+    
+    ;; LAYER VARIABLES (per drawing)
+    ("LAYERPMODE" . 1)       ; Layer property viewport overrides
+    ("LAYEREVAL" . 1)        ; Evaluate new layers for standards
+    
+    ;; DIMENSION VARIABLES (drawing-specific)
+    ("DIMASSOC" . 2)         ; Fully associative dimensions
+    
+    ;; HATCH VARIABLES (drawing-specific)  
+    ("HPASSOC" . 1)          ; Associative hatching
+    ("FILLMODE" . 1)         ; Enable fill mode
+    
+    ;; XREF VARIABLES (per drawing)
+    ("XLOADCTL" . 2)         ; Demand load xrefs with copy
+    
+    ;; TEXT VARIABLES (drawing-specific)
+    ("TEXTFILL" . 1)         ; Fill TrueType fonts
+    ("MIRRTEXT" . 0)         ; Don't mirror text
+    ))
+
+;; Lightweight system variable enforcement for per-drawing use
+(defun enforce-drawing-sysvars (/ sysvar-list var-pair changes-made current-val)
+  (setq sysvar-list (get-drawing-sysvar-standards))
+  (setq changes-made 0)
+  
+  (foreach var-pair sysvar-list
+    (setq current-val (getvar (car var-pair)))
+    (if (/= current-val (cdr var-pair))
+      (progn
+        (setvar (car var-pair) (cdr var-pair))
+        (setq changes-made (1+ changes-made))
+      )
+    )
+  )
+  
+  (if (> changes-made 0)
+    (princ (strcat "\nAdjusted " (itoa changes-made) " drawing-specific system variables."))
+  )
+  (princ)
+)
+
+;; Function to check if this is a new drawing vs existing
+(defun is-new-drawing ()
+  (or 
+    (= (getvar "DWGTITLED") 0)     ; Untitled drawing
+    (= (getvar "DBMOD") 0)         ; No modifications
+  )
+)
+
+;; Function to set up new drawing defaults
+(defun setup-new-drawing-defaults ()
+  (princ "\nSetting up new drawing with standard system variables...")
+  
+  ;; Additional settings for new drawings only
+  (setvar "LTSCALE" 1.0)
+  (setvar "CELTSCALE" 1.0)
+  (setvar "DIMSCALE" 1.0)
+  (setvar "TEXTSIZE" 0.125)    ; Standard text height
+  (setvar "DIMASSOC" 2)        ; Associative dimensions
+  (setvar "PICKSTYLE" 1)       ; Group selection
+  (setvar "OSMODE" 4133)       ; Standard OSNAP settings
+  
+  (princ "\nNew drawing defaults applied.")
+  (princ)
+)
+
+;; Main per-document initialization function
+(defun per-document-initialization ()
+  (princ "\n--- Document-Specific Initialization ---")
+  
+  ;; Always enforce critical drawing variables
+  (enforce-drawing-sysvars)
+  
+  ;; Additional setup for new drawings
+  (if (is-new-drawing)
+    (setup-new-drawing-defaults)
+  )
+  
+  ;; Drawing-specific welcome message
+  (princ (strcat "\nDocument: " (getvar "DWGNAME")))
+  (princ "\nSystem Variable Enforcement: Active")
+  (princ "\n----------------------------------")
+  (princ)
+)
+
+;; Command to manually re-enforce drawing variables
+(defun c:enforce-drawing-sysvars () 
+  (enforce-drawing-sysvars)
+  (princ "\nDrawing system variables re-enforced!")
+  (princ)
+)
+
+;; Alias for convenience
+(defun c:edsv () (c:enforce-drawing-sysvars))
+
+;; Command to reset drawing to standards (more comprehensive)
+(defun c:reset-drawing-standards ()
+  (princ "\nResetting drawing to full standards...")
+  (enforce-drawing-sysvars)
+  (setup-new-drawing-defaults)
+  
+  ;; Additional resets
+  (command "REGEN")
+  (princ "\nDrawing standards reset complete!")
+  (princ)
+)
+
+;; Alias for reset command  
+(defun c:rds () (c:reset-drawing-standards))
+
+;; DOCUMENT EXECUTION - This runs for each drawing opened
+(per-document-initialization)
+
+;; Silent completion
+(princ)

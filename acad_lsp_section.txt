@@ -1,0 +1,189 @@
+;; =============================================================================
+;; ACAD.LSP - SYSTEM VARIABLE ENFORCEMENT (STARTUP ONLY)
+;; =============================================================================
+;; This file loads once when AutoCAD starts
+;; Copy and paste this entire section into your acad.lsp file
+;; =============================================================================
+
+;; Define the system variables and their required values
+(defun get-sysvar-standards ()
+  '(
+    ;; PLOTTING CRITICAL VARIABLES
+    ("PSLTSCALE" . 1)        ; Paper space linetype scaling
+    ("MSLTSCALE" . 1)        ; Model space linetype scaling  
+    ("LTSCALE" . 1.0)        ; Global linetype scale
+    ("CELTSCALE" . 1.0)      ; Current entity linetype scale
+    ("VISRETAIN" . 1)        ; Retain xref layer settings
+    ("LWDISPLAY" . 1)        ; Display lineweights
+    ("PLOTLEGACY" . 0)       ; Use new plot engine
+    ("BACKGROUNDPLOT" . 2)   ; Background plotting on
+    
+    ;; LAYER AND DISPLAY VARIABLES
+    ("LAYERPMODE" . 1)       ; Layer property viewport overrides
+    ("LAYEREVAL" . 1)        ; Evaluate new layers for standards
+    ("LAYERNOTIFY" . 15)     ; Layer notification settings
+    ("MAXACTVP" . 64)        ; Maximum active viewports
+    
+    ;; ANNOTATION AND TEXT VARIABLES
+    ("ANNOAUTOSCALE" . -4)   ; Automatic annotation scaling
+    ("TEXTQLTY" . 50)        ; Text quality for plotting
+    ("TEXTFILL" . 1)         ; Fill TrueType fonts
+    ("MIRRTEXT" . 0)         ; Don't mirror text
+    
+    ;; DIMENSION VARIABLES
+    ("DIMASSOC" . 2)         ; Fully associative dimensions
+    
+    ;; HATCH AND FILL VARIABLES
+    ("FILLMODE" . 1)         ; Enable fill mode
+    ("HPGAPTOL" . 0.0)       ; Hatch gap tolerance
+    ("HPASSOC" . 1)          ; Associative hatching
+    
+    ;; PERFORMANCE VARIABLES
+    ("INDEXCTL" . 3)         ; Layer and spatial indexing
+    ("SORTENTS" . 127)       ; Entity sorting for better performance
+    ("MAXSORT" . 1000)       ; Maximum sorted entities
+    ("RASTERPREVIEW" . 1)    ; Create raster preview
+    
+    ;; XREF VARIABLES
+    ("XLOADCTL" . 2)         ; Demand load xrefs with copy
+    ("PROJECTNAME" . "")     ; Clear project name if not used
+    
+    ;; SYSTEM BEHAVIOR
+    ("DRAGMODE" . 2)         ; Auto drag mode
+    ("PICKSTYLE" . 1)        ; Group selection enabled
+    ("HIGHLIGHT" . 1)        ; Highlight selected objects
+    ("COORDS" . 1)           ; Coordinate display
+    ("CMDECHO" . 1)          ; Command echoing
+    ))
+
+;; Function to safely set a system variable with error handling
+(defun safe-setvar (varname value / current-val)
+  (if (and varname value)
+    (progn
+      (setq current-val (getvar varname))
+      (if (/= current-val value)
+        (progn
+          (princ (strcat "\nEnforcing " varname ": " 
+                        (vl-princ-to-string current-val) 
+                        " -> " 
+                        (vl-princ-to-string value)))
+          (setvar varname value)
+          T
+        )
+        nil
+      )
+    )
+    nil
+  )
+)
+
+;; Function to enforce all system variables
+(defun enforce-sysvars (/ sysvar-list var-pair changes-made)
+  (setq sysvar-list (get-sysvar-standards))
+  (setq changes-made 0)
+  
+  (princ "\n=== System Variable Enforcement ===")
+  
+  (foreach var-pair sysvar-list
+    (if (safe-setvar (car var-pair) (cdr var-pair))
+      (setq changes-made (1+ changes-made))
+    )
+  )
+  
+  (if (> changes-made 0)
+    (princ (strcat "\nEnforced " (itoa changes-made) " system variables."))
+    (princ "\nAll system variables already compliant.")
+  )
+  
+  (princ "\n=====================================\n")
+  (princ)
+)
+
+;; Function to check system variables without changing them
+(defun check-sysvars (/ sysvar-list var-pair non-compliant current-val)
+  (setq sysvar-list (get-sysvar-standards))
+  (setq non-compliant '())
+  
+  (princ "\n=== System Variable Compliance Check ===")
+  
+  (foreach var-pair sysvar-list
+    (setq current-val (getvar (car var-pair)))
+    (if (/= current-val (cdr var-pair))
+      (progn
+        (setq non-compliant (cons var-pair non-compliant))
+        (princ (strcat "\n" (car var-pair) ": " 
+                      (vl-princ-to-string current-val) 
+                      " (should be " 
+                      (vl-princ-to-string (cdr var-pair)) 
+                      ")"))
+      )
+    )
+  )
+  
+  (if non-compliant
+    (progn
+      (princ (strcat "\n" (itoa (length non-compliant)) " variables are non-compliant."))
+      (princ "\nUse ENFORCE-SYSVARS to fix these issues.")
+    )
+    (princ "\nAll system variables are compliant!")
+  )
+  
+  (princ "\n========================================\n")
+  (princ)
+)
+
+;; Function to create a report of current system variable values
+(defun report-sysvars (/ sysvar-list var-pair filename file)
+  (setq sysvar-list (get-sysvar-standards))
+  (setq filename (strcat (getvar "DWGPREFIX") "sysvar_report_" 
+                        (rtos (getvar "CDATE") 2 0) ".txt"))
+  
+  (setq file (open filename "w"))
+  (if file
+    (progn
+      (write-line "=== AutoCAD System Variable Report ===" file)
+      (write-line (strcat "Drawing: " (getvar "DWGNAME")) file)
+      (write-line (strcat "Date: " (rtos (getvar "CDATE") 2 6)) file)
+      (write-line "=======================================" file)
+      (write-line "" file)
+      
+      (foreach var-pair sysvar-list
+        (write-line (strcat (car var-pair) " = " 
+                           (vl-princ-to-string (getvar (car var-pair)))
+                           " (standard: " 
+                           (vl-princ-to-string (cdr var-pair))
+                           ")")
+                    file)
+      )
+      
+      (close file)
+      (princ (strcat "\nSystem variable report saved to: " filename))
+    )
+    (princ "\nError: Could not create report file")
+  )
+  (princ)
+)
+
+;; Define user commands
+(defun c:enforce-sysvars () (enforce-sysvars))
+(defun c:check-sysvars () (check-sysvars))
+(defun c:report-sysvars () (report-sysvars))
+
+;; Alias commands for convenience
+(defun c:esv () (enforce-sysvars))
+(defun c:csv () (check-sysvars))
+(defun c:rsv () (report-sysvars))
+
+;; STARTUP EXECUTION - This runs once when AutoCAD starts
+(princ "\n=== AutoCAD System Variable Enforcement Loaded ===")
+(princ "\nCommands available:")
+(princ "\n  ENFORCE-SYSVARS (ESV) - Apply all standards")
+(princ "\n  CHECK-SYSVARS (CSV)   - Check compliance")
+(princ "\n  REPORT-SYSVARS (RSV)  - Generate report")
+(princ "\n=============================================")
+
+;; Enforce system variables at AutoCAD startup
+(enforce-sysvars)
+
+(princ "\nSystem Variable Enforcement Ready!")
+(princ)
